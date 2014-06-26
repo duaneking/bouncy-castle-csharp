@@ -35,26 +35,24 @@ namespace CreateCertificate
         }
 
         /// <summary>
-        /// Prove that the parentCaCertificate actualy did issue the childIssuedCertificate.
+        /// Prove that the Certificates PublicKey actualy is the pair of the Private Key
         /// </summary>
-        /// <param name="parentCaCertificate">The parent CA root certificate.</param>
-        /// <param name="childIssuedCertificate">childIssuedCertificate</param>
+        /// <param name="certificateWithPublicAndPrivateKeys">certificateWithPublicAndPrivateKeys</param>
         /// <returns></returns>
-        public static bool Validate(X509Certificate2 parentCaCertificate, X509Certificate2 childIssuedCertificate)
+        public static bool ValidatePublicPrivateKeyPair(X509Certificate2 certificateWithPublicAndPrivateKeys)
         {
-            if (!parentCaCertificate.HasPrivateKey)
+            if (!certificateWithPublicAndPrivateKeys.HasPrivateKey)
             {
                 throw new Exception("CA must have private key.");
             }
 
-            parentCaCertificate.Verify(); // Passes if we add to root store. Not an issue.
-            childIssuedCertificate.Verify(); // Passes if we add to store. Not an issue.
+            certificateWithPublicAndPrivateKeys.Verify(); // Passes if we add to root store. Not an issue.
 
             // Generate Random Data to take the place of important data .
             byte[] secretData = Get4KRandomBytes();
 
             // Collect Private key from CA root used to sign hash.
-            var rcspPrivate = parentCaCertificate.PrivateKey as RSACryptoServiceProvider;
+            var rcspPrivate = certificateWithPublicAndPrivateKeys.PrivateKey as RSACryptoServiceProvider;
 
             Debug.Assert(rcspPrivate != null, "rcsp_private != null"); // Make Resharper happy.
 
@@ -67,7 +65,7 @@ namespace CreateCertificate
                 var signatureToBeValidated = rcspPrivate.SignHash(secretDataHash, CryptoConfig.MapNameToOID("SHA1"));
 
                 // We now Collect the PULIC key of the issued cert that was created/issued as the child of the parent CA certificate to the non-CA subject.
-                var rcspPublic = childIssuedCertificate.PublicKey.Key as RSACryptoServiceProvider;
+                var rcspPublic = certificateWithPublicAndPrivateKeys.PublicKey.Key as RSACryptoServiceProvider;
 
                 // So use the public key of the issued cert created as the child of the parent CA certificate to validate that the Parent CA did in fact issue this certificate as subject/issuer names can be spoofed/faked.
                 Debug.Assert(rcspPublic != null, "rcspPublic != null"); // Make Resharper happy.
@@ -84,7 +82,7 @@ namespace CreateCertificate
             Console.WriteLine("CreateCertificate self subject-name subject.pfx");
             Console.WriteLine("CreateCertificate ca subject-name CA.pfx");
             Console.WriteLine("CreateCertificate issue CA.pfx subject-name subject.pfx");
-            Console.WriteLine("CreateCertificate validate CA.pfx subject.pfx");
+            Console.WriteLine("CreateCertificate validate subject.pfx");
 
             return -1;
         }
@@ -142,24 +140,22 @@ namespace CreateCertificate
                 }
                 case "validate":
                 {
-                    if (args.Length != 3)
+                    if (args.Length !=2)
                     {
                         return ShowUsage();
                     }
 
-                    var issuerCaFileName = args[1];
-                    var subjectCaFileName = args[2];
+                    var subjectCaFileName = args[1];
 
-                    var caCertificate = LoadCertificate(issuerCaFileName, "password");
                     var issuedFtromCaCertificate = LoadCertificate(subjectCaFileName, "password");
 
-                    if (!ValidateCertificate.Validate(caCertificate, issuedFtromCaCertificate))
+                    if (!ValidateCertificate.ValidatePublicPrivateKeyPair(issuedFtromCaCertificate))
                     {
-                        Console.WriteLine("Validation Failed.  We generated a key that can not validate items signed by the parent CA so we have no way to validate that the CA issued it.");
+                        Console.WriteLine("Validation Failed.  We generated a key that can not validate sign/hash signed data.");
                         return 1;
                     }
 
-                    Console.WriteLine("Validation OK. We generated a key that can validate items signed by the parent CA so can now pove that the CA issued this certificate.");
+                    Console.WriteLine("Validation OK. We generated a key that can validate items signed its private key with its public key.");
                     return 0;
                 }
                 default:
